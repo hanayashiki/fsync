@@ -1,0 +1,5 @@
+.idea/
+tests/configs
+tests/.pytest_cache
+tests/data/
+*.pyc
