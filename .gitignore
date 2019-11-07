@@ -2,4 +2,5 @@
 tests/configs
 tests/.pytest_cache
 tests/data/
+tests/tmp/
 *.pyc

@@ -61,7 +61,7 @@ class MasterConfig:
 class SlaveConfig:
   slave_addr: Tuple[str, int]
   use_ssl: bool
-  allowed_secrets: List[str]
+  allowed_secrets: List[str] = field(default_factory=list)
 
 @dataclass
 class MasterMessage:

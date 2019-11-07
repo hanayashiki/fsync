@@ -30,7 +30,9 @@ class Master(common.Runnable):
   @classmethod
   def from_config_dict(cls, d: Dict):
     assert d["type"] == "master"
+    del d["type"]
     mapping_config = MappingConfig(**d["mapping_config"])
+    del d["mapping_config"]
     config = common.MasterConfig(**d)
 
     if config.use_ssl:
@@ -75,7 +77,6 @@ class Master(common.Runnable):
                                             excluding_wildcards=self.mapping_config.excluding_wildcards,
                                             )
         new_file_infos = {}
-        # logger.info(f"scanned {len(fileinfos)} files")
 
         update_messages: List[Tuple[MasterMessage, Optional[bytes]]] = []
 
@@ -172,7 +173,7 @@ class Master(common.Runnable):
           for p in pending:
             p.cancel()
       except Exception:
-          logger.error(traceback.format_exc())
+        logger.error(traceback.format_exc())
       finally:
         await asyncio.sleep(failure_sleep)
 
@@ -181,7 +182,6 @@ class Master(common.Runnable):
 def main(config):
   config_dict = json.load(open(config))
   master = Master.from_config_dict(config_dict)
-
   asyncio.run(master.run())
 
 

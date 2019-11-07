@@ -38,5 +38,5 @@ def match(wildcard: str, s: str):
 def configure_socks(version, address, port):
   import socks
   import socket
-  socks.set_default_proxy(version, address, port)
+  socks.set_default_proxy(socks.PROXY_TYPES[version], address, port)
   socket.socket = socks.socksocket

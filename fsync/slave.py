@@ -11,7 +11,7 @@ import traceback
 import click
 import json
 
-from fsync.common import FileInfo, MappingConfig, ConfigurationError, SlaveMessage, MasterMessage
+from fsync.common import FileInfo, SlaveConfig, MappingConfig, ConfigurationError, SlaveMessage, MasterMessage
 from fsync import common
 
 logger = logging.getLogger("fsync")
@@ -25,13 +25,15 @@ class Slave(common.Runnable):
 
   def __init__(self,
                listen_addr: Tuple[str, int],
-               ssl_context: Optional[ssl.SSLContext]):
+               ssl_context: Optional[ssl.SSLContext],
+               allowed_secrets: List[str]):
     self.listen_addr = listen_addr
     self.listen_ip, self.listen_port = listen_addr
     self.ssl_context = ssl_context
+    self.allowed_secrets = allowed_secrets
 
   def normalize_slave_path(self, context: Context, s: str):
-    p = s.replace(context.mapping_config.slave_dir + "/", "", 1)  # Chop off the master_dir
+    p = s.replace(context.mapping_config.slave_dir.replace("\\", "/") + "/", "", 1)  # Chop off the master_dir
     return p
 
   def parse_path(self, p: str):
@@ -66,9 +68,7 @@ class Slave(common.Runnable):
             messages.append(slave_massage.serialize())
             context.file_hashes[normalized_path] = fileinfo.hash
 
-        if len(messages) > 0:
-          logger.info(f"Sent {len(messages)} messages")
-          await ws.send(common.MESSAGE_SEP.join(messages) + common.MESSAGE_SEP)
+        await ws.send(common.MESSAGE_SEP.join(messages) + common.MESSAGE_SEP)
 
         await asyncio.sleep(mapping_config.scan_period)
     except Exception as e:
@@ -119,6 +119,9 @@ class Slave(common.Runnable):
     context = Context(mapping_config=mapping_config,
                       file_hashes={})
 
+    if mapping_config.secret not in self.allowed_secrets:
+      await ws.close(4403, "Forbidden")
+
     await asyncio.wait([self.scan_files(context, ws), self.receive_update(context, ws)])
 
 
@@ -132,6 +135,21 @@ class Slave(common.Runnable):
     else:
       return await ws.close(4404, "Not Found")
 
+  @classmethod
+  def from_config_dict(cls, d: Dict):
+    assert d["type"] == "slave"
+    del d["type"]
+    slave_config = SlaveConfig(**d)
+
+    if slave_config.use_ssl:
+      ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    else:
+      ssl_context = None
+
+    return Slave(listen_addr=slave_config.slave_addr,
+                 ssl_context=ssl_context,
+                 allowed_secrets=slave_config.allowed_secrets)
+
   async def run(self):
     logger.info(f"Slave started. ")
     await websockets.serve(self.handler,
@@ -139,17 +157,14 @@ class Slave(common.Runnable):
                            self.listen_port,
                            ssl=self.ssl_context)
 @click.command()
-@click.option("--config", "c", default="slave.json", help="Json configuration for slave. ")
+@click.option("--config", "-c", default="slave.json", help="Json configuration for slave. ")
 def main(config):
   config_dict = json.load(open(config))
-  slave = Slave(**config_dict)
-
-  asyncio.run(slave.run())
-
-
-if __name__ == '__main__':
-  slave = Slave(listen_addr=("127.0.0.1", 31415),
-                ssl_context=None)
+  slave = Slave.from_config_dict(config_dict)
 
   asyncio.get_event_loop().run_until_complete(slave.run())
   asyncio.get_event_loop().run_forever()
+
+
+if __name__ == '__main__':
+  main()
